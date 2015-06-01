@@ -5,8 +5,9 @@ Description
 -----------
 
 This script helps to migrate Git repos from Bitbucket to Stash. It only migrates
-bare Git repos (no pull requests, no issues, no access management, ...). It
-creates Stash projects and repos if they do not exist.
+bare Git repos and repo SSH keys (no pull requests, no issues, no access
+management, ...). It creates Stash projects and repos if they do not exist. It is
+safe to run the script multiple times even on partially migrated projects.
 
 
 Usage
@@ -35,7 +36,7 @@ Example of how to migrate one Bitbucket project to the same project in Stash:
 
 ```
 for REPO in $(./bb2s.py list bitbucket repos myproject); do
-  ./bb2s.py myproject $REPO "My project" myproject;
+  ./bb2s.py -k myproject $REPO "My project" myproject;
 done
 ```
 
@@ -55,7 +56,7 @@ git_protocol=https://
 [stash]
 api_username=mystashuser
 api_password=myStashP4ssw0rd
-api_url=http://example.com:7990/stash/rest/api/latest
+api_url=http://example.com:7990/stash/rest
 git_url=https://example.com/stash/scm
 ```
 
@@ -63,12 +64,6 @@ It's possible to change the Git protocol from `https` to `ssh` for both the
 Bitbucket and Stash. Just set `git_protocol=ssh://mybitbucketuser@` in the
 `[bitbucket]` section and `git_url=ssh://mystashuser@example.com/stash/scm` in
 the `[stash]` section.
-
-
-TODO
-----
-
-- Pagination of `get_project_list` and `get_repo_list` in the `Stash` class
 
 
 Dependencies
