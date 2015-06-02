@@ -26,8 +26,9 @@ Usage:
 
 Options:
   -c FILE --config=FILE  Config file path [default: bb2s.ini].
-  -d --debug             Show debug messages.
+  -k --keys              Handle SSH keys.
   -q --quiet             Do not show any messages.
+  -d --debug             Show debug messages.
   -h --help              Show this screen.
   --version              Show version.
 ```

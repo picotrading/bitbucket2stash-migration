@@ -4,7 +4,7 @@
 Script which helps to migrate Git repos from Bitbucket to Stash.
 
 Usage:
-  bb2s [options] list bitbucket [repos] <bitbucket_prj>
+  bb2s [options] list bitbucket repos <bitbucket_prj>
   bb2s [options] list stash (projects|repos <stash_prj_key>)
   bb2s [options] <bitbucket_prj> <bitbucket_repo> <stash_prj_name> \
 <stash_prj_key> [<stash_repo>]
@@ -504,10 +504,11 @@ class Bitbucket2Stash:
             sys.exit(1)
 
         # Print the result
-        for repo, keys in sorted(zip(repo_list['list'], repo_list['keys'])):
-            if self.args['--keys']:
+        if self.args['--keys']:
+            for repo, keys in sorted(zip(repo_list['list'], repo_list['keys'])):
                 print '%s\t[keys: %d]' % (repo, keys)
-            else:
+        else:
+            for repo in sorted(repo_list['list']):
                 print repo
 
     def list_stash_projects(self):
