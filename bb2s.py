@@ -41,14 +41,14 @@ class Bitbucket:
     password = ''
     project = ''
     log = None
-    keys = False
+    ssh_keys = False
 
-    def __init__(self, username, password, project, logger, keys=False):
+    def __init__(self, username, password, project, logger, ssh_keys=False):
         self.username = username
         self.password = password
         self.project = project
         self.log = logger
-        self.keys = keys
+        self.ssh_keys = ssh_keys
 
         self.log.debug('Creating Bitbucket object instance')
 
@@ -59,7 +59,7 @@ class Bitbucket:
 
         ret = {}
         ret['list'] = []
-        ret['keys'] = []
+        ret['ssh_keys'] = []
         ret['next'] = None
         ret['status'] = True
         next_url = None
@@ -79,19 +79,19 @@ class Bitbucket:
                     repo_name = values['full_name'].split('/')[1]
                     ret['list'].append(repo_name)
 
-                    if self.keys:
-                        keys = self.get_repo_keys(repo_name)
+                    if self.ssh_keys:
+                        ssh_keys = self.get_repo_ssh_keys(repo_name)
 
-                        if keys['status'] == True:
-                            ret['keys'].append(len(keys['list']))
+                        if ssh_keys['status'] == True:
+                            ret['ssh_keys'].append(len(ssh_keys['list']))
             else:
                 ret['status'] = False
                 url = None
 
         return ret
 
-    def get_repo_keys(self, repo):
-        self.log.debug('Getting list of all Bitbucket repo keys')
+    def get_repo_ssh_keys(self, repo):
+        self.log.debug('Getting list of all Bitbucket repo SSH keys')
 
         url = (
             'https://api.bitbucket.org/1.0/repositories/%s/%s/deploy-keys' %
@@ -122,11 +122,12 @@ class Stash:
     log = None
     limit = 100
 
-    def __init__(self, username, password, url, logger):
+    def __init__(self, username, password, url, logger, ssh_keys):
         self.username = username
         self.password = password
         self.url = url
         self.log = logger
+        self.ssh_keys = ssh_keys
 
         self.log.debug('Creating Stash object instance')
 
@@ -136,6 +137,7 @@ class Stash:
         ret = {}
         ret['names'] = []
         ret['keys'] = []
+        ret['ssh_keys'] = []
         ret['status'] = True
         last = False
         start = 0
@@ -156,6 +158,13 @@ class Stash:
                 for project in data['values']:
                     ret['names'].append(project['name'])
                     ret['keys'].append(project['key'].lower())
+
+                    if self.ssh_keys:
+                        ssh_keys = self.get_project_ssh_keys(
+                            project['key'].lower())
+
+                        if ssh_keys['status'] == True:
+                            ret['ssh_keys'].append(len(ssh_keys['list']))
             else:
                 ret['status'] = False
                 last = True
@@ -188,6 +197,7 @@ class Stash:
 
         ret = {}
         ret['list'] = []
+        ret['ssh_keys'] = []
         ret['status'] = True
         last = False
         start = 0
@@ -207,6 +217,14 @@ class Stash:
 
                 for values in data['values']:
                     ret['list'].append(values['slug'])
+
+                    if self.ssh_keys:
+                        ssh_keys = self.get_repo_ssh_keys(
+                            prj_key,
+                            values['slug'])
+
+                        if ssh_keys['status'] == True:
+                            ret['ssh_keys'].append(len(ssh_keys['list']))
             else:
                 ret['status'] = False
                 last = True
@@ -234,8 +252,38 @@ class Stash:
 
         return ret
 
-    def get_repo_keys(self, prj_key, repo):
-        self.log.debug('Getting list of all Stash repo keys')
+    def get_project_ssh_keys(self, prj_key):
+        self.log.debug('Getting list of all Stash project SSH keys')
+
+        ret = {}
+        ret['list'] = []
+        ret['status'] = True
+        last = False
+        start = 0
+
+        while not last:
+            r = requests.get(
+                '%s/keys/latest/projects/%s/ssh?limit=%d&start=%d' %
+                (self.url, prj_key, self.limit, start),
+                auth=(self.username, self.password))
+
+            if r.status_code == 200:
+                data = r.json()
+                last = data['isLastPage']
+
+                if not last:
+                    start = data['nextPageStart']
+
+                for values in data['values']:
+                    ret['list'].append(values['key'])
+            else:
+                ret['status'] = False
+                last = True
+
+        return ret
+
+    def get_repo_ssh_keys(self, prj_key, repo):
+        self.log.debug('Getting list of all Stash repo SSH keys')
 
         ret = {}
         ret['list'] = []
@@ -264,8 +312,8 @@ class Stash:
 
         return ret
 
-    def add_repo_key(self, prj_key, repo, key):
-        self.log.debug('Adding Stash repo key')
+    def add_repo_ssh_key(self, prj_key, repo, key):
+        self.log.debug('Adding Stash repo SSH key')
 
         ret = {}
         ret['status'] = False
@@ -331,7 +379,8 @@ class Bitbucket2Stash:
             self.config.get('stash', 'api_username'),
             self.config.get('stash', 'api_password'),
             self.config.get('stash', 'api_url'),
-            self.log)
+            self.log,
+            self.args['--keys'])
 
         # Get list of Stash projects
         project_list = stash.get_project_list()
@@ -420,7 +469,7 @@ class Bitbucket2Stash:
         self.log.debug('Deleting local temporal repo')
         shutil.rmtree(tmp_repo_dir)
 
-    def copy_keys(self):
+    def copy_ssh_keys(self):
         # Create Bitbucket object
         bb = Bitbucket(
             self.config.get('bitbucket', 'api_username'),
@@ -429,15 +478,15 @@ class Bitbucket2Stash:
             self.log)
 
         # Get list of all Bitbucket repos
-        bb_keys_list = bb.get_repo_keys(self.args['<bitbucket_repo>'])
+        bb_ssh_keys_list = bb.get_repo_ssh_keys(self.args['<bitbucket_repo>'])
 
         # Check if the connection was successful
-        if not bb_keys_list['status']:
-            self.log.error('Can not get list of Bitbucket repo keys!')
+        if not bb_ssh_keys_list['status']:
+            self.log.error('Can not get list of Bitbucket repo SSH keys!')
             sys.exit(1)
 
         # No keys to copy over
-        if len(bb_keys_list['list']) == 0:
+        if len(bb_ssh_keys_list['list']) == 0:
             return
 
         # Create Stash object
@@ -445,25 +494,26 @@ class Bitbucket2Stash:
             self.config.get('stash', 'api_username'),
             self.config.get('stash', 'api_password'),
             self.config.get('stash', 'api_url'),
-            self.log)
+            self.log,
+            self.args['--keys'])
 
         # Get list of Stash projects
-        stash_keys_list = stash.get_repo_keys(
+        stash_ssh_keys_list = stash.get_repo_ssh_keys(
             self.args['<stash_prj_key>'],
             self.args['<stash_repo>'])
 
         # Check if the connection was successful
-        if not stash_keys_list['status']:
-            self.log.error('Can not get list of Stash repo keys!')
+        if not stash_ssh_keys_list['status']:
+            self.log.error('Can not get list of Stash repo SSH keys!')
             sys.exit(1)
 
         key_found = False
 
         # Compare keys
-        for bb_key in bb_keys_list['list']:
+        for bb_key in bb_ssh_keys_list['list']:
             bb_k = re.split('\s+', bb_key['key'])[1]
 
-            for stash_key in stash_keys_list['list']:
+            for stash_key in stash_ssh_keys_list['list']:
                 stash_k = re.split('\s+', stash_key['text'])[1]
 
                 if bb_k == stash_k:
@@ -472,13 +522,13 @@ class Bitbucket2Stash:
 
             if not key_found:
                 # Add the key
-                success = stash.add_repo_key(
+                success = stash.add_repo_ssh_key(
                     self.args['<stash_prj_key>'],
                     self.args['<stash_repo>'],
                     bb_key['key'])
 
                 if not success['status']:
-                    self.log.error("Can not add Stash repo key")
+                    self.log.error("Can not add Stash repo SSH key")
                     sys.exit(1)
 
     def list_bitbucket_repos(self):
@@ -505,7 +555,8 @@ class Bitbucket2Stash:
 
         # Print the result
         if self.args['--keys']:
-            for repo, keys in sorted(zip(repo_list['list'], repo_list['keys'])):
+            for repo, keys in sorted(
+                    zip(repo_list['list'], repo_list['ssh_keys'])):
                 print '%s\t[keys: %d]' % (repo, keys)
         else:
             for repo in sorted(repo_list['list']):
@@ -519,7 +570,8 @@ class Bitbucket2Stash:
             self.config.get('stash', 'api_username'),
             self.config.get('stash', 'api_password'),
             self.config.get('stash', 'api_url'),
-            self.log)
+            self.log,
+            self.args['--keys'])
 
         # Get list of Stash projects
         project_list = stash.get_project_list()
@@ -531,10 +583,11 @@ class Bitbucket2Stash:
 
         # Print the result
         if self.args['--keys']:
-            for key in sorted(project_list['keys']):
-                print key
+            for name, keys in sorted(
+                    zip(project_list['keys'], project_list['ssh_keys'])):
+                print '%s\t[keys: %d]' % (name, keys)
         else:
-            for name in sorted(project_list['names']):
+            for name in sorted(project_list['keys']):
                 print name
 
     def list_stash_repos(self):
@@ -547,7 +600,8 @@ class Bitbucket2Stash:
             self.config.get('stash', 'api_username'),
             self.config.get('stash', 'api_password'),
             self.config.get('stash', 'api_url'),
-            self.log)
+            self.log,
+            self.args['--keys'])
         # Get list of repos from the Stash project
         repo_list = stash.get_repo_list(self.args['<stash_prj_key>'])
 
@@ -557,8 +611,13 @@ class Bitbucket2Stash:
             sys.exit(1)
 
         # Print the result
-        for repo in sorted(repo_list['list']):
-            print repo
+        if self.args['--keys']:
+            for name, keys in sorted(
+                    zip(repo_list['list'], repo_list['ssh_keys'])):
+                print '%s\t[keys: %d]' % (name, keys)
+        else:
+            for name in sorted(repo_list['list']):
+                print name
 
 
 def main():
@@ -613,7 +672,7 @@ def main():
         bb2s.copy_repo()
 
         if args['--keys']:
-            bb2s.copy_keys()
+            bb2s.copy_ssh_keys()
 
 
 if __name__ == '__main__':
